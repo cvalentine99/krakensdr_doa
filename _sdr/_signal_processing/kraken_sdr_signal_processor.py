@@ -93,6 +93,9 @@ class SignalProcessor(threading.Thread):
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging_level)
 
+        # Lock for thread-safe access to shared state (DOA results, spectrum, etc.)
+        self._lock = threading.Lock()
+
         self.root_path = root_path
         doa_res_file_path = os.path.join(shared_path, "DOA_value.html")
         self.DOA_res_fd = open(doa_res_file_path, "w+")
@@ -491,14 +494,15 @@ class SignalProcessor(threading.Thread):
                             max_power_level_str = ""
                             doa_result_log = np.empty(0)
 
-                            self.theta_0_list.clear()
-                            self.freq_list.clear()
-                            self.doa_result_log_list.clear()
-                            self.max_power_level_list.clear()
-                            self.confidence_list.clear()
-                            self.number_of_correlated_sources.clear()
-                            self.snrs.clear()
-                            self.fm_demod_channel_list.clear()
+                            with self._lock:
+                                self.theta_0_list.clear()
+                                self.freq_list.clear()
+                                self.doa_result_log_list.clear()
+                                self.max_power_level_list.clear()
+                                self.confidence_list.clear()
+                                self.number_of_correlated_sources.clear()
+                                self.snrs.clear()
+                                self.fm_demod_channel_list.clear()
 
                             relative_freqs = self.spectrum[0, ::-1]
                             real_freqs = self.module_receiver.daq_center_freq - relative_freqs
@@ -1252,6 +1256,20 @@ class SignalProcessor(threading.Thread):
                 self.pool.join()
             except Exception:
                 pass
+
+    def get_doa_results_snapshot(self):
+        """
+        Thread-safe method to get a snapshot of DOA results.
+        Returns a copy of the current DOA result lists to avoid race conditions.
+        """
+        with self._lock:
+            return {
+                'theta_0_list': self.theta_0_list.copy(),
+                'freq_list': self.freq_list.copy(),
+                'confidence_list': self.confidence_list.copy(),
+                'max_power_level_list': self.max_power_level_list.copy(),
+                'doa_result_log_list': [arr.copy() for arr in self.doa_result_log_list],
+            }
 
 
 def calculate_end_lat_lng(s_lat: float, s_lng: float, doa: float, my_bearing: float) -> Tuple[float, float]:

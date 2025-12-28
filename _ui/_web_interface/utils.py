@@ -225,8 +225,10 @@ def fetch_dsp_data(app, web_interface, spectrum_fig, waterfall_fig):
     elif web_interface.pathname == "/doa" and doa_update_flag:
         plot_doa(app, web_interface, doa_fig)
 
-    web_interface.dsp_timer = Timer(0.01, fetch_dsp_data, args=(app, web_interface, spectrum_fig, waterfall_fig))
-    web_interface.dsp_timer.start()
+    # Only reschedule if not stopping (prevents race condition on disconnect)
+    if not getattr(web_interface, '_timers_stopping', False):
+        web_interface.dsp_timer = Timer(0.01, fetch_dsp_data, args=(app, web_interface, spectrum_fig, waterfall_fig))
+        web_interface.dsp_timer.start()
 
 
 def fetch_gps_data(app, web_interface):
@@ -238,8 +240,10 @@ def fetch_gps_data(app, web_interface):
         }
     )
 
-    web_interface.gps_timer = Timer(1, fetch_gps_data, args=(app, web_interface))
-    web_interface.gps_timer.start()
+    # Only reschedule if not stopping (prevents race condition on disconnect)
+    if not getattr(web_interface, '_timers_stopping', False):
+        web_interface.gps_timer = Timer(1, fetch_gps_data, args=(app, web_interface))
+        web_interface.gps_timer.start()
 
 
 def settings_change_watcher(web_interface, settings_file_path, last_attempt_failed=False):
@@ -411,10 +415,12 @@ def settings_change_watcher(web_interface, settings_file_path, last_attempt_fail
                     web_interface.needs_refresh = True
                     web_interface.save_configuration()
 
-    web_interface.settings_change_timer = Timer(
-        0.5, settings_change_watcher, args=(web_interface, settings_file_path, last_attempt_failed)
-    )
-    web_interface.settings_change_timer.start()
+    # Only reschedule if not stopping (prevents race condition on disconnect)
+    if not getattr(web_interface, '_timers_stopping', False):
+        web_interface.settings_change_timer = Timer(
+            0.5, settings_change_watcher, args=(web_interface, settings_file_path, last_attempt_failed)
+        )
+        web_interface.settings_change_timer.start()
 
 
 def update_daq_status(app, web_interface):

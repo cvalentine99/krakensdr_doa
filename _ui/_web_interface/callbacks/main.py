@@ -47,9 +47,11 @@ from variables import (
 @app.callback_connect
 def func(client, connect):
     if connect and len(app.clients) == 1:
+        web_interface._timers_stopping = False  # Reset flag on connect
         fetch_dsp_data(app, web_interface, spectrum_fig, waterfall_fig)
         fetch_gps_data(app, web_interface)
     elif not connect and len(app.clients) == 0:
+        web_interface._timers_stopping = True  # Set flag before cancel to prevent race
         web_interface.dsp_timer.cancel()
         web_interface.gps_timer.cancel()
 
@@ -1061,7 +1063,8 @@ def reconfig_daq_chain(input_value, freq, gain):
     web_interface.daq_restart = 1
     #    Restart DAQ Subsystem
 
-    # Stop settings file watcher
+    # Stop settings file watcher (set flag first to prevent race condition)
+    web_interface._timers_stopping = True
     web_interface.settings_change_timer.cancel()
 
     # Stop signal processing
