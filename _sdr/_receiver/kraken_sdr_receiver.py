@@ -23,7 +23,6 @@ import _thread
 import logging
 import os
 import socket
-import sys
 
 # Import built-in modules
 from struct import pack
@@ -194,6 +193,7 @@ class ReceiverRTLSDR:
         if self.data_interface == "eth":
             self.socket_inst.sendall(str.encode("IQDownload"))  # Send iq request command
             self.iq_samples = self.receive_iq_frame()
+            return 0
 
         elif self.data_interface == "shmem":
             active_buff_index = self.in_shmem_iface.wait_buff_free()
@@ -229,6 +229,7 @@ class ReceiverRTLSDR:
             np.copyto(self.iq_samples, iq_samples_in)
 
             self.in_shmem_iface.send_ctr_buff_ready(active_buff_index)
+            return 0
 
     def receive_iq_frame(self):
         """
@@ -397,7 +398,7 @@ class ReceiverRTLSDR:
 
             # Set agc
             cmd = "AGC ".encode()
-            msg_bytes = cmd + bytearray(128 - sys.getsizeof(cmd))
+            msg_bytes = cmd + bytearray(128 - len(cmd))
             try:
                 _thread.start_new_thread(self.ctr_iface_communication, (msg_bytes,))
             except Exception as error:

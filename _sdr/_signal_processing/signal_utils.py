@@ -16,7 +16,11 @@ def audible(signal):
     """
     Scale so it's audible
     """
-    signal = np.int16(signal / np.max(np.abs(signal)) * 32767)
+    max_val = np.max(np.abs(signal))
+    if max_val > 0:
+        signal = np.int16(signal / max_val * 32767)
+    else:
+        signal = np.zeros_like(signal, dtype=np.int16)
     return signal
 
 

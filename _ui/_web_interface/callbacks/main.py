@@ -630,7 +630,7 @@ def update_dsp_params(
         web_interface.compass_offset = compass_offset
     web_interface.module_signal_processor.compass_offset = compass_offset
     web_interface.module_signal_processor.ula_direction = ula_direction
-    if is_int(compass_offset):
+    if is_int(array_offset):
         web_interface.module_signal_processor.array_offset = array_offset
 
     if en_peak_hold is not None and len(en_peak_hold):

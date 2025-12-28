@@ -630,7 +630,7 @@ class SignalProcessor(threading.Thread):
                                     self.freq_list.append(write_freq)
                                     self.doa_result_log_list.append(doa_result_log)
 
-                                    if self.vfo_demod_modes[i] or self.vfo_iq_enabled[i]:
+                                    if self.vfo_demod_modes[i] not in (None, "None") or self.vfo_iq_enabled[i]:
                                         if theta_0 not in self.vfo_theta_channel[i]:
                                             self.vfo_theta_channel[i].append(theta_0)
 
@@ -741,9 +741,10 @@ class SignalProcessor(threading.Thread):
                         )
                         que_data_packet.append(["spectrum", spectrum_plot_data])
 
+                    sampling_freq = self.module_receiver.iq_header.sampling_freq
                     daq_cpi = int(
-                        self.module_receiver.iq_header.cpi_length * 1000 / self.module_receiver.iq_header.sampling_freq
-                    )
+                        self.module_receiver.iq_header.cpi_length * 1000 / sampling_freq
+                    ) if sampling_freq > 0 else 0
                     # We don't include processing latency here, because reported timestamp marks end of the data frame
                     # so latency is essentially an acquisition time.
                     self.latency = daq_cpi
@@ -796,6 +797,8 @@ class SignalProcessor(threading.Thread):
                         write_freq = self.freq_list[0]
 
                         # Save XML unconditionally, e.g., used by DF-Aggregator
+                        num_corr_sources = self.number_of_correlated_sources[0] if self.number_of_correlated_sources else 0
+                        snr_val = self.snrs[0] if self.snrs else 0.0
                         self.wr_xml(
                             self.station_id,
                             DOA_str,
@@ -807,8 +810,8 @@ class SignalProcessor(threading.Thread):
                             self.heading,
                             self.speed,
                             self.adc_overdrive,
-                            self.number_of_correlated_sources[0],
-                            self.snrs[0],
+                            num_corr_sources,
+                            snr_val,
                         )
 
                         if self.DOA_data_format == "Kraken Pro Local" or self.DOA_data_format == "Kraken Pro Remote" :
@@ -828,8 +831,8 @@ class SignalProcessor(threading.Thread):
                                     self.heading,
                                     self.speed,
                                     self.adc_overdrive,
-                                    self.number_of_correlated_sources[0],  # maybe needs j as well
-                                    self.snrs[0],  # maybe needs j as well
+                                    num_corr_sources,  # maybe needs j as well
+                                    snr_val,  # maybe needs j as well
                                 )
 
                         elif self.DOA_data_format == "RDF Mapper":
@@ -891,8 +894,8 @@ class SignalProcessor(threading.Thread):
                                     "processing_time": str(self.processing_time),
                                     "doaarray": message,
                                     "adc_overdrive": self.adc_overdrive,
-                                    "num_corr_sources": self.number_of_correlated_sources[0],
-                                    "snr_db": self.snrs[0],
+                                    "num_corr_sources": num_corr_sources,
+                                    "snr_db": snr_val,
                                 }
                                 try:
                                     self.pool.apply_async(requests.post, args=[self.RDF_mapper_server, post])
@@ -1227,6 +1230,28 @@ class SignalProcessor(threading.Thread):
             os.path.getsize(os.path.join(os.path.join(self.root_path, self.data_recording_file_name))) / 1048576,
             2,
         )  # Convert to MB
+
+    def close(self):
+        """
+        Clean up resources: close file handles and stop processing.
+        """
+        self.run_processing = False
+        if hasattr(self, 'DOA_res_fd') and self.DOA_res_fd:
+            try:
+                self.DOA_res_fd.close()
+            except Exception:
+                pass
+        if hasattr(self, 'data_record_fd') and self.data_record_fd:
+            try:
+                self.data_record_fd.close()
+            except Exception:
+                pass
+        if hasattr(self, 'pool') and self.pool:
+            try:
+                self.pool.close()
+                self.pool.join()
+            except Exception:
+                pass
 
 
 def calculate_end_lat_lng(s_lat: float, s_lng: float, doa: float, my_bearing: float) -> Tuple[float, float]:
@@ -1628,7 +1653,7 @@ def gen_scanning_vectors(M, DOA_inter_elem_space, type, offset):
         r = DOA_inter_elem_space * to_r
         x = r * np.cos(2 * np.pi / M * np.arange(M))
         y = -r * np.sin(2 * np.pi / M * np.arange(M))  # For this specific array only
-    elif "ULA":
+    elif type == "ULA":
         x = np.zeros(M)
         y = -np.arange(M) * DOA_inter_elem_space
 
@@ -1652,7 +1677,7 @@ def gen_scanning_vectors_custom(M, custom_x, custom_y):
     y = np.zeros(M, dtype=np.float32)
 
     for i in range(len(custom_x)):
-        if i > M:
+        if i >= M:
             break
         if custom_x[i] == "":
             x[i] = 0
@@ -1660,9 +1685,9 @@ def gen_scanning_vectors_custom(M, custom_x, custom_y):
             x[i] = float(custom_x[i])
 
     for i in range(len(custom_y)):
-        if i > M:
+        if i >= M:
             break
-        if custom_x[i] == "":
+        if custom_y[i] == "":
             y[i] = 0
         else:
             y[i] = float(custom_y[i])
